@@ -1,6 +1,6 @@
 import requests
 import json
-import math
+from utils import czas_na_sekundy
 from pathlib import Path
 import logging
 
@@ -29,18 +29,30 @@ def stworz_trase_linii(linia: int, api_key: str):
         return 1
 
     trasa_linii = data['result'][str(linia)]
-    dobra_trasa = {'linia': linia}
+    dobra_trasa = {'linia': linia, 'warianty_tras': dict()}
 
     for trasa in trasa_linii:
-        dobra_trasa[trasa] = dict()
+        dobra_trasa['warianty_tras'][trasa] = dict()
         for nr_przystanku in trasa_linii[trasa]:
             id_przystanku = trasa_linii[trasa][nr_przystanku]['nr_zespolu']
             nmr_zespolu = trasa_linii[trasa][nr_przystanku]['nr_przystanku']
             odl = trasa_linii[trasa][nr_przystanku]['odleglosc']
-            dobra_trasa[trasa][nr_przystanku] = {
+            dobra_trasa['warianty_tras'][trasa][int(nr_przystanku)] = {
                 'przystanek_id': f"{id_przystanku}_{nmr_zespolu}",
                 'odleglosc': odl
             }
+    
+    # przekształcenie wartości odległość w odległość od początku, a nie od ostatniego przystanku
+    for trasa in dobra_trasa['warianty_tras']:
+        if trasa == 'linia':
+            continue
+        posortowane_klucze = sorted(dobra_trasa['warianty_tras'][trasa].keys() , key=int)
+
+        skumulowana_suma = 0
+        for przystanek in posortowane_klucze:
+            skumulowana_suma += dobra_trasa['warianty_tras'][trasa][przystanek]['odleglosc']
+            dobra_trasa['warianty_tras'][trasa][przystanek]['odleglosc'] = skumulowana_suma
+    
 
     sciezka = DATA_DIR / f"trasa_{linia}.json"
     with open(sciezka, 'w', encoding='utf-8') as f:
@@ -49,7 +61,7 @@ def stworz_trase_linii(linia: int, api_key: str):
     return 0
 
 
-def stworz_rozklad_linii(linia: int, api_key: str):
+def stworz_rozklad_linii(linia: str, api_key: str):
     endpoint = "dbtimetable_get"
     URL = BASE_URL + endpoint
     ID_ENDPOINT_ROZKLADOW = 'e923fa0e-d96c-43f9-ae6e-60518c9f3238'
@@ -60,10 +72,8 @@ def stworz_rozklad_linii(linia: int, api_key: str):
         final_json = {'linia': linia, 'brygady': dict()}
         
         unikalne_przystanki_id = set()
-        for trasa in json_tras:
-            if trasa == 'linia':
-                continue
-            for przystanek in json_tras[trasa].values():
+        for trasa in json_tras['warianty_tras']:
+            for przystanek in json_tras['warianty_tras'][trasa].values():
                 unikalne_przystanki_id.add(przystanek['przystanek_id'])
 
         for przystanek_id in unikalne_przystanki_id:
@@ -101,10 +111,10 @@ def stworz_rozklad_linii(linia: int, api_key: str):
                 for kvp in kurs:
                     if kvp['key'] == 'brygada':
                         stop_info['brygada'] = kvp['value']
-                    if kvp['key'] == 'trasa':
+                    elif kvp['key'] == 'trasa':
                         stop_info['trasa'] = kvp['value']
-                    if kvp['key'] == 'czas':
-                        stop_info['czas'] = kvp['value']
+                    elif kvp['key'] == 'czas':
+                        stop_info['czas_str'] = kvp['value']
                 
                 rozklad_przystanku['rozklad'].append(stop_info)
 
@@ -115,7 +125,8 @@ def stworz_rozklad_linii(linia: int, api_key: str):
 
                 final_json['brygady'][nr_brygady].append(
                     {'przystanek_id': przystanek_id,
-                    'czas': stop['czas'],
+                    'czas_str': stop['czas_str'],
+                    'czas': czas_na_sekundy(stop['czas_str']),
                     'trasa': stop['trasa']
                     }
                     )
@@ -153,13 +164,13 @@ def stworz_baze_polozen_przystankow(api_key: str):
         for kvp in przystanek['values']:
             if kvp['key'] == 'zespol':
                 zespol = kvp['value']
-            if kvp['key'] == 'slupek':
+            elif kvp['key'] == 'slupek':
                 slupek = kvp['value']
-            if kvp['key'] == 'szer_geo':
+            elif kvp['key'] == 'szer_geo':
                 dobry_przystanek['lat'] = float(kvp['value'])
-            if kvp['key'] == 'dlug_geo':
+            elif kvp['key'] == 'dlug_geo':
                 dobry_przystanek['lon'] = float(kvp['value'])
-            if kvp['key'] == 'nazwa_zespolu':
+            elif kvp['key'] == 'nazwa_zespolu':
                 dobry_przystanek['nazwa_przystanku'] = kvp['value']
             
         przystanek_id = f"{zespol}_{slupek}"
@@ -171,7 +182,7 @@ def stworz_baze_polozen_przystankow(api_key: str):
     
     return 0
 
-def zbierz_obecne_polozenie(api_key: str, linie: list) -> list[dict]:
+def zbierz_obecne_polozenie(api_key: str, linie: list[str]) -> list[dict]:
     endpoint = 'busestrams_get'
     BUS_LOC_RESOURCE_ID = 'f2e5503e-927d-4ad3-9500-4ab9e55deb59'
     BUS_LOC_URL = BASE_URL + endpoint
@@ -195,10 +206,12 @@ def zbierz_obecne_polozenie(api_key: str, linie: list) -> list[dict]:
             'lat': x['Lat'],
             'lon': x['Lon'],
             'brygada': x['Brigade'],
-            'czas': x['Time']
+            'czas_str': x['Time'],
+            'czas': czas_na_sekundy(x['Time'])
             } for x in data['result'] if x['Lines'] in linie]
 
-    with open('polozenie.json', 'w') as f:
+    sciezka = DATA_DIR / 'polozenie.json'
+    with open(sciezka, 'w') as f:
         json.dump(wynik, f, indent=4)
 
     return wynik
