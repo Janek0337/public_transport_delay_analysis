@@ -70,7 +70,7 @@ def stworz_trase_linii(api_key: str, linia: str):
     with open(sciezka, 'w', encoding='utf-8') as f:
         json.dump(odwrocona_trasa, f, ensure_ascii=False, indent=4)
 
-    return 0
+    return odwrocona_trasa
 
 
 def stworz_rozklad_linii(api_key: str, linia: str):
@@ -78,79 +78,124 @@ def stworz_rozklad_linii(api_key: str, linia: str):
     URL = BASE_URL + endpoint
     ID_ENDPOINT_ROZKLADOW = 'e923fa0e-d96c-43f9-ae6e-60518c9f3238'
 
-    sciezka = DATA_DIR / f"trasa_{linia}.json"
-    with open(sciezka, "r") as f:
-        json_tras = json.load(f)
-        final_json = {'linia': linia, 'brygady': dict()}
+    trasa_linii = stworz_trase_linii(api_key, linia)
+
+    final_json = {'linia': linia, 'brygady': dict()}
+    
+    unikalne_przystanki_id = set()
+    for trasa in trasa_linii['warianty_tras']:
+        for przystanek in trasa_linii['warianty_tras'][trasa].keys():
+            unikalne_przystanki_id.add(przystanek)
+
+    for przystanek_id in unikalne_przystanki_id:
+
+        przystanek_info = przystanek_id.split('_')
+        params = {
+            'id': ID_ENDPOINT_ROZKLADOW,
+            'apikey': api_key,
+            'busstopId': przystanek_info[0],
+            'busstopNr': przystanek_info[1],
+            'line': linia
+        }
+        try:
+            res = requests.get(url=URL, params=params)
+            res.raise_for_status()
+            data = res.json()
+
+        except Exception as e:
+            logger.error(f"Błąd API przy tworzeniu rozkładu jazdy linii {linia}: {e}")
+            return 1
+
+        rozklad_przystanku = {'przystanek_id': przystanek_id,
+                            'line': linia,
+                            'rozklad': []
+                            }
         
-        unikalne_przystanki_id = set()
-        for trasa in json_tras['warianty_tras']:
-            for przystanek in json_tras['warianty_tras'][trasa].keys():
-                unikalne_przystanki_id.add(przystanek)
+        kursy = data['result']
+        if not isinstance(kursy, list):
+            logger.debug(f"Pominęto przystanek {przystanek_id} (brak rozkładu)")
+            continue
 
-        for przystanek_id in unikalne_przystanki_id:
+        for kurs in kursy:
+            stop_info = dict()
 
-            przystanek_info = przystanek_id.split('_')
-            params = {
-                'id': ID_ENDPOINT_ROZKLADOW,
-                'apikey': api_key,
-                'busstopId': przystanek_info[0],
-                'busstopNr': przystanek_info[1],
-                'line': linia
-            }
-            try:
-                res = requests.get(url=URL, params=params)
-                res.raise_for_status()
-                data = res.json()
-
-            except Exception as e:
-                logger.error(f"Błąd API przy tworzeniu rozkładu jazdy linii {linia}: {e}")
-                return 1
-
-            rozklad_przystanku = {'przystanek_id': przystanek_id,
-                                'line': linia,
-                                'rozklad': []
-                                }
+            for kvp in kurs:
+                if kvp['key'] == 'brygada':
+                    stop_info['brygada'] = kvp['value']
+                elif kvp['key'] == 'trasa':
+                    stop_info['trasa'] = kvp['value']
+                elif kvp['key'] == 'czas':
+                    stop_info['czas_str'] = kvp['value']
             
-            kursy = data['result']
-            if not isinstance(kursy, list):
-                logger.debug(f"Pominęto przystanek {przystanek_id} (brak rozkładu)")
-                continue
+            rozklad_przystanku['rozklad'].append(stop_info)
 
-            for kurs in kursy:
-                stop_info = dict()
+        for stop in rozklad_przystanku['rozklad']:
+            nr_brygady = stop['brygada']
+            if nr_brygady not in final_json['brygady']:
+                final_json['brygady'][nr_brygady] = []
 
-                for kvp in kurs:
-                    if kvp['key'] == 'brygada':
-                        stop_info['brygada'] = kvp['value']
-                    elif kvp['key'] == 'trasa':
-                        stop_info['trasa'] = kvp['value']
-                    elif kvp['key'] == 'czas':
-                        stop_info['czas_str'] = kvp['value']
-                
-                rozklad_przystanku['rozklad'].append(stop_info)
-
-            for stop in rozklad_przystanku['rozklad']:
-                nr_brygady = stop['brygada']
-                if nr_brygady not in final_json['brygady']:
-                    final_json['brygady'][nr_brygady] = []
-
+            try:
                 final_json['brygady'][nr_brygady].append(
                     {'przystanek_id': przystanek_id,
                     'czas_str': stop['czas_str'],
                     'czas': czas_na_sekundy(stop['czas_str']),
-                    'trasa': stop['trasa']
+                    'trasa': stop['trasa'],
+                    'metr': trasa_linii['warianty_tras'][stop['trasa']][przystanek_id]['odleglosc'],
+                    'nr_kolejnosci': trasa_linii['warianty_tras'][stop['trasa']][przystanek_id]['nr_kolejnosci']
                     }
                     )
-                
+            except KeyError as e:
+                logging.warning(f"Nie znaleziono przystnaku o id {przystanek_id} w trasie linii {linia}. Pomijam go.")
+                continue
+
+        
+            
     for brygada in final_json['brygady']:
         final_json['brygady'][brygada].sort(key=lambda x: x['czas'])
-                
+    
+    final_json['brygady'] = _pogrupuj_kursy(final_json['brygady'])
+
     sciezka_out = DATA_DIR / f"rozklad_{linia}.json"
     with open(sciezka_out, 'w', encoding="utf-8") as out:
         json.dump(final_json, out, ensure_ascii=False, indent=4)
 
     return 0
+
+def _pogrupuj_kursy(lista_brygad: dict[str, list]):
+    pogrupowane_kursy = dict()
+    id_kursu = 0
+    for brygada in lista_brygad.keys():
+        kursy_brygady = []
+        przystanki = []
+        for i, przystanek in enumerate(lista_brygad[brygada]):
+            if not przystanki:
+                trasa = przystanek['trasa']
+                czas_startu = przystanek['czas']
+            
+            przystanki.append(_usun_ze_slownika(przystanek, 'trasa'))
+
+            if i+1 < len(lista_brygad[brygada]) and lista_brygad[brygada][i+1]['nr_kolejnosci'] == 0:
+                czas_konca = przystanek['czas']
+
+                kursy_brygady.append({
+                    'id_kursu': id_kursu,
+                    'trasa': trasa,
+                    'czas_startu': czas_startu,
+                    'czas_konca': czas_konca,
+                    'przystanki': przystanki
+                })
+                id_kursu += 1
+                przystanki = []
+
+        
+        pogrupowane_kursy[brygada] = kursy_brygady
+
+    return pogrupowane_kursy
+
+def _usun_ze_slownika(slownik: dict, klucz) -> dict:
+    nowy_slownik = slownik.copy()
+    nowy_slownik.pop(klucz, None)
+    return nowy_slownik 
 
 
 def stworz_baze_polozen_przystankow(api_key: str):
