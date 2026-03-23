@@ -6,7 +6,6 @@ import kolektor_danych
 
 def main():
 
-
     logger = logging.getLogger(__name__)
     setup_logger(True)
 
@@ -17,9 +16,10 @@ def main():
     API_KEY = os.getenv('API_KEY')
 
     linie = ['523']
-    #kolektor_danych.zbierz_obecne_polozenie(API_KEY, linie)
-    kolektor_danych.stworz_trase_linii(linie[0], API_KEY)
-    kolektor_danych.stworz_rozklad_linii(linie[0], API_KEY)
+    kolektor_danych.zbierz_obecne_polozenie(API_KEY, linie)
+    kolektor_danych.stworz_trase_linii(API_KEY, linie[0])
+    kolektor_danych.stworz_rozklad_linii(API_KEY, linie[0])
+    kolektor_danych.stworz_baze_polozen_przystankow(API_KEY)
 
     logger.info("Stop")
 

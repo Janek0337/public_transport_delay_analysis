@@ -11,7 +11,7 @@ DATA_DIR = ROOT_DIR / 'data'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BASE_URL = "https://api.um.warszawa.pl/api/action/"
 
-def stworz_trase_linii(linia: int, api_key: str):
+def stworz_trase_linii(api_key: str, linia: str):
     endpoint = "public_transport_routes"
     URL = BASE_URL + endpoint
 
@@ -70,7 +70,7 @@ def stworz_trase_linii(linia: int, api_key: str):
     return 0
 
 
-def stworz_rozklad_linii(linia: str, api_key: str):
+def stworz_rozklad_linii(api_key: str, linia: str):
     endpoint = "dbtimetable_get"
     URL = BASE_URL + endpoint
     ID_ENDPOINT_ROZKLADOW = 'e923fa0e-d96c-43f9-ae6e-60518c9f3238'
@@ -82,8 +82,8 @@ def stworz_rozklad_linii(linia: str, api_key: str):
         
         unikalne_przystanki_id = set()
         for trasa in json_tras['warianty_tras']:
-            for przystanek in json_tras['warianty_tras'][trasa].values():
-                unikalne_przystanki_id.add(przystanek['przystanek_id'])
+            for przystanek in json_tras['warianty_tras'][trasa].keys():
+                unikalne_przystanki_id.add(przystanek)
 
         for przystanek_id in unikalne_przystanki_id:
 
