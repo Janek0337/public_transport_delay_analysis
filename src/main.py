@@ -21,7 +21,7 @@ def main():
     kolektor_danych.stworz_rozklad_linii(API_KEY, linie[0])
     kolektor_danych.stworz_baze_polozen_przystankow(API_KEY)
 
-    logger.info("Stop")
+    logger.info("Finished")
 
 if __name__ == "__main__":
     main()
