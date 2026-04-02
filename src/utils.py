@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / 'data'
+DOKLADNOSC_GPS_M = 30
 
 def oblicz_odleglosc(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371000.0
@@ -30,9 +31,7 @@ def czas_na_sekundy(czas_str: str) -> int:
     return wynik
 
 def czy_pojazd_sie_ruszyl(lat1: float, lon1: float, lat2: float, lon2: float) -> bool:
-        MIN_DYSTANS_M = 40.0
-
-        return oblicz_odleglosc(lat1, lon1, lat2, lon2) > MIN_DYSTANS_M
+        return oblicz_odleglosc(lat1, lon1, lat2, lon2) > DOKLADNOSC_GPS_M
 
 def oblicz_proporcje_przybytej_drogi(lat_a: float, lon_a: float, lat_b: float, lon_b: float, lat_sz: float, lon_sz: float) -> float:
         d_a = oblicz_odleglosc(lat_a, lon_a, lat_sz, lon_sz)

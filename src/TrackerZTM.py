@@ -10,7 +10,8 @@ class StanPojazdu(TypedDict):
     stan: str
     historia_gps: List[GpsPoint]
     id_kursu: Optional[int]
-    ostatni_przystanek_idx: Optional[str]
+    nastpeny_przystanek: dict | None
+    poprzedni_przystanek: dict | None
 
 BrygadaInfo = dict[str, StanPojazdu] # numer_brygady: StanPojazdu
 LinieInfo = dict[str, BrygadaInfo] # numer_linii: BrygadaInfo
@@ -20,7 +21,8 @@ def stworz_nowy_stan(lat: float, lon: float, czas: int) -> StanPojazdu:
         'stan': 'INICJALIZACJA',
         'historia_gps': [(lat, lon, czas)],
         'id_kursu': None,
-        'ostatni_przystanek_idx': None
+        'nastpeny_przystanek': None,
+        'poprzedni_przystanek': None
     }
 
 class TrackerZTM:
@@ -47,13 +49,13 @@ class TrackerZTM:
         #       "stan": "INICJALIZACJA",
         #       "historia_gps": [(lat, lon, czas), (lat, lon, czas)],
         #       "id_kursu": None,
-        #       "ostatni_przystanek_idx": None
+        #       "nastpeny_przystanek_idx": None
         #   },
         #   "17": {
         #       "stan": "INICJALIZACJA",
         #       "historia_gps": [(lat, lon, czas), (lat, lon, czas)],
         #       "id_kursu": None,
-        #       "ostatni_przystanek_idx": None
+        #       "nastpeny_przystanek_idx": None
         #   }
         # }
 
@@ -76,9 +78,7 @@ class TrackerZTM:
             self.pojazdy[linia][brygada] = stworz_nowy_stan(lat, lon, czas_gps)
             return 2 # przerywamy i czekamy na kolejne pingi
 
-        # wyciągamy obecny stan autobusu
         pojazd = self.pojazdy[linia][brygada]
-
 
         if pojazd["stan"] == "INICJALIZACJA":
 
@@ -98,11 +98,36 @@ class TrackerZTM:
             pojazd['historia_gps'] = []
             logger.info(f"Linia {linia}, brygada {brygada}: kurs_id: {rozklad_id}")
 
+            przystanek_A, przystanek_B = self._znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(linia, brygada, pojazd['id_kursu'], lat, lon)
+            pojazd['poprzedni_przystanek'] = przystanek_A
+            pojazd['nastpeny_przystanek'] = przystanek_B
+
             return 0
 
         elif pojazd["stan"] == "W_TRASIE":
-            # - Znajdź przystanek A i B w przypisanym id_kursu
-            # - Sprawdź czy autobus minął B (jeśli tak, zaktualizuj ostatni_przystanek_idx)
+            przystanek_A, przystanek_B = pojazd['poprzedni_przystanek'], pojazd['nastpeny_przystanek']
+            if przystanek_A is None or przystanek_B is None:
+                return 2
+            
+            lat_a, lon_a = self.przystanki[przystanek_A['przystanek_id']]['lat'], self.przystanki[przystanek_A['przystanek_id']]['lon']
+            lat_b, lon_b = self.przystanki[przystanek_B['przystanek_id']]['lat'], self.przystanki[przystanek_B['przystanek_id']]['lon']
+            
+            if not self._sprawdz_zawartosc_w_odcinku(lat_a, lon_a, lat_b, lon_b, lat, lon):
+                przystanek_A, przystanek_B = self._znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(linia, brygada, pojazd['id_kursu'], lat, lon)
+                pojazd['poprzedni_przystanek'] = przystanek_A
+                pojazd['nastpeny_przystanek'] = przystanek_B
+
+            proporcja_przebytej_drogi = self._oblicz_proporcje_przebytej_trasy(przystanek_A, przystanek_B, lat, lon)
+
+            metr1, metr2 = przystanek_A['metr'], przystanek_B['metr']
+            przebyty_odcinek = proporcja_przebytej_drogi*(metr2 - metr1)
+            obecny_metr_trasy = metr1 + przebyty_odcinek
+
+            czas1, czas2 = przystanek_A['czas'], przystanek_B['czas']
+            czas_rzeczywisty_trasy = czas1 + proporcja_przebytej_drogi*(czas2 - czas1)
+            oczekiwany_metr = 
+            
+
             # - Policz Proporcję, Obecny Metr, Oczekiwany Czas i Opóźnienie
             # - Zapisz opóźnienie
             
@@ -110,9 +135,14 @@ class TrackerZTM:
             pass
 
         elif pojazd["stan"] == "NA_PETLI":
-            # - Sprawdź, czy czas_gps zbliża się do czasu startu kolejnego kursu
-            pass
+            nowy_kurs_id = pojazd['id_kursu']
+            czas_poczatku_nastpenej_trasy = self.rozklady[linia][brygada][nowy_kurs_id]['czas_startu']
+            if czas_gps > czas_poczatku_nastpenej_trasy:
+                pojazd['stan'] = 'W_TRASIE'
+                pojazd['nastpeny_przystanek'] = self.rozklady[linia][brygada][nowy_kurs_id]['przystanki'][1]
 
+                return 0
+            
     # ---------------------------------------------------------
     # METODY POMOCNICZE (Prywatne)
     # ---------------------------------------------------------
@@ -210,76 +240,41 @@ class TrackerZTM:
                 id_przystankow.append(przystanek_3_id)
 
         return id_przystankow
-    
 
-# ==========================================
-# MODUŁ TESTOWY (Uruchomi się tylko przy wywołaniu tego pliku)
-# ==========================================
-if __name__ == "__main__":
-    import time
-    
-    # 1. Konfiguracja testu - PODMIEŃ DANE NA ZGODNE Z TWOIM JSON-em
-    TEST_LINIA = "523"
-    TEST_BRYGADA = "4" # Podmień na brygadę, którą masz w swoim pliku
-    
-    # Wybierz z rozkładu czas startu jakiegoś kursu (w sekundach)
-    CZAS_BAZOWY = 34260 + 600  # Np. to Twoje 05:34:00 z poprzedniej wiadomości
-    
-    # Wybierz z pliku przystanki.json koordynaty pierwszego przystanku z tego kursu
-    LAT_PRZYSTANEK_1 = 52.250082  # <-- Wpisz prawdziwe lat
-    LON_PRZYSTANEK_1 = 21.089155  # <-- Wpisz prawdziwe lon
-    
-    # Wybierz z pliku przystanki.json koordynaty DRUGIEGO przystanku z tego kursu
-    # (Potrzebujemy ich, żeby zasymulować ruch we właściwym kierunku)
-    LAT_PRZYSTANEK_2 = 52.24942 # <-- Wpisz prawdziwe lat
-    LON_PRZYSTANEK_2 = 21.09299 # <-- Wpisz prawdziwe lon
+    def _znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(self, linia: str, brygada: str, id_kursu: int, lat_sz: float, lon_sz: float) -> tuple[dict, dict]:
+        lista_przystankow_kursu = self.rozklady[linia][brygada][id_kursu]['przystanki']
 
-    # Wybierz z pliku przystanki.json koordynaty TRZECIEGO przystanku z tego kursu
-    LAT_PRZYSTANEK_3 = 52.247932  # <-- Wpisz prawdziwe lat dla 3. przystanku
-    LON_PRZYSTANEK_3 = 21.098391
+        for i in range(len(lista_przystankow_kursu)):
+            if i+1 < len(lista_przystankow_kursu):
+                id_A = lista_przystankow_kursu[i]['przystanek_id']
+                id_B = lista_przystankow_kursu[i+1]['przystanek_id']
 
-    print("\n--- INICJALIZACJA SYSTEMU ---")
-    tracker = TrackerZTM(linie=[TEST_LINIA])
-    print("Rozkłady i przystanki wczytane pomyślnie!")
+                lat_a, lon_a = self.przystanki[id_A]['lat'], self.przystanki[id_A]['lon']
+                lat_b, lon_b = self.przystanki[id_B]['lat'], self.przystanki[id_B]['lon']
 
-    print("\n--- START SYMULACJI API ZTM ---")
+                if self._sprawdz_zawartosc_w_odcinku(lat_a, lon_a, lat_b, lon_b, lat_sz, lon_sz):
+                    return (lista_przystankow_kursu[i], lista_przystankow_kursu[i+1])
+                
+        logging.info(f"Linia {linia}, brygada {brygada}: nie znaleziono przypasowania okna.")
+        return ("-1", "-1")
+                
+    def _sprawdz_zawartosc_w_odcinku(self, lat_a: float, lon_a: float, lat_b: float, lon_b:  float, lat_c: float, lon_c: float) -> bool:
+        BUFOR_ROZNICY_M = 100
+        dA = utils.oblicz_odleglosc(lat_c, lon_c, lat_a, lon_a)
+        dB = utils.oblicz_odleglosc(lat_c, lon_c, lat_b, lon_b)
+        dC = utils.oblicz_odleglosc(lat_b, lon_b, lat_a, lon_a)
 
-    # KROK 1: Pierwszy sygnał. Autobus pojawia się w okolicach 1. przystanku.
-    print("\n[PING 1] Autobus loguje się w systemie...")
-    wynik_1 = tracker.przetworz_pozycje(TEST_LINIA, TEST_BRYGADA, LAT_PRZYSTANEK_1 + 0.0001, LON_PRZYSTANEK_1, CZAS_BAZOWY)
+        return dA + dB > dC + BUFOR_ROZNICY_M
     
-    print(f"Zwrócony kod (oczekiwany 2): {wynik_1}")
-    
-    if wynik_1 == 1:
-        print(f"❌ BŁĄD: Skrypt twierdzi, że brygady '{TEST_BRYGADA}' nie ma w rozkładzie!")
-        print(f"Oto klucze (brygady), które skrypt fizycznie widzi w pamięci: {list(tracker.rozklady[TEST_LINIA].keys())}")
-    else:
-        stan = tracker.pojazdy[TEST_LINIA][TEST_BRYGADA]
-        print(f"✅ Stan w Notatniku: {stan['stan']}")
+    def _oblicz_proporcje_przebytej_trasy(self, przystanek_A: dict, przystanek_B: dict, lat_sz: float, lon_sz: float) -> float:
+        
+        lat_a, lon_a = self.przystanki[przystanek_A['przystanek_id']]['lat'], self.przystanki[przystanek_A['przystanek_id']]['lon']
+        lat_b, lon_b = self.przystanki[przystanek_B['przystanek_id']]['lat'], self.przystanki[przystanek_B['przystanek_id']]['lon']
+        
+        dA = utils.oblicz_odleglosc(lat_a, lon_a, lat_sz, lon_sz)
+        dB = utils.oblicz_odleglosc(lat_b, lon_b, lat_sz, lon_sz)
+        dC = utils.oblicz_odleglosc(lat_a, lon_a, lat_b, lon_b)
 
-    # KROK 2: Dryf GPS. Autobus stoi, ale GPS "skacze" o 10 metrów.
-    print("\n[PING 2] Autobus stoi na czerwonym świetle (Dryf GPS rzędu 15 metrów)...")
-    # Lekka zmiana koordynatów, ale za mała, żeby przekroczyć nasz próg 40 metrów
-    wynik_2 = tracker.przetworz_pozycje(TEST_LINIA, TEST_BRYGADA, LAT_PRZYSTANEK_1 + 0.0002, LON_PRZYSTANEK_1 + 0.0001, CZAS_BAZOWY + 15)
-    stan = tracker.pojazdy[TEST_LINIA][TEST_BRYGADA]
-    print(f"Zwrócony kod (oczekiwany 2): {wynik_2}")
-    print(f"Liczba punktów w historii (oczekiwana 1 - ignorujemy dryf): {len(stan['historia_gps'])}")
+        proporcja = (dA**2 + dC**2 - dB**2 ) / (2 * dC**2)
 
-    # KROK 3: Autobus rusza z kopyta! Jedzie w stronę 2. przystanku.
-    print("\n[PING 3] Autobus przejechał 200 metrów w stronę drugiego przystanku!")
-    # Aby zasymulować ruch w stronę przystanku 2, bierzemy średnią (środek drogi)
-    lat_w_ruchu = (LAT_PRZYSTANEK_1 + LAT_PRZYSTANEK_2) / 2
-    lon_w_ruchu = (LON_PRZYSTANEK_1 + LON_PRZYSTANEK_2) / 2
-    
-    wynik_3 = tracker.przetworz_pozycje(TEST_LINIA, TEST_BRYGADA, lat_w_ruchu, lon_w_ruchu, CZAS_BAZOWY + 30)
-    
-    # KROK 4: Werdykt
-    print("\n--- WYNIK INICJALIZACJI ---")
-    stan = tracker.pojazdy[TEST_LINIA][TEST_BRYGADA]
-    print(f"Ostateczny stan autobusu: {stan['stan']}")
-    if stan['stan'] == 'W_TRASIE':
-        print(f"✅ SUKCES! Przypisano ID Kursu: {stan['id_kursu']}")
-    else:
-        print("❌ BŁĄD! Autobus nie wszedł w stan W_TRASIE. Sprawdź logi (warningi).")
-
-    
+        return proporcja
