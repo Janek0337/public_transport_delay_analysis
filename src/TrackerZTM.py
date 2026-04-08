@@ -67,6 +67,10 @@ class TrackerZTM:
 
         if pojazd["stan"] == "INICJALIZACJA":
 
+            if len(pojazd['historia_gps']) < 1:
+                pojazd["historia_gps"].append((lat, lon, czas_gps))
+                return 2
+
             # jesli pojazd nie ruszyl sie znaczoco to czekamy az sie ruszy
             if not utils.czy_pojazd_sie_ruszyl(pojazd['historia_gps'][0][0], pojazd['historia_gps'][0][1], lat, lon):
                 logging.info(f"{linia}/{brygada}: Brak ruchu, oczekiwanie na dalsze pomiary do inicjalizacji")
@@ -128,7 +132,7 @@ class TrackerZTM:
                                 pojazd['nastpeny_przystanek'] = pB_nast
                                 logger.info(f"{linia}/{brygada}: Przeskoczył na kurs {nast_kurs_id} omijając strefę pętli")
                                 return 2
-                    logger.warning(f"{linia}/{brygada} się zgubił")
+                    logger.warning(f"{linia}/{brygada} nie jest między oczekiwanymi przystankami")
                     return 2
             
                 pojazd['poprzedni_przystanek'] = przystanek_A
@@ -144,13 +148,22 @@ class TrackerZTM:
             czas_oczekiwany_rozkladowy = czas1 + proporcja_przebytej_drogi*(czas2 - czas1)
             opoznienie = czas_gps - czas_oczekiwany_rozkladowy
 
+            if opoznienie > 3600 or opoznienie < -600:
+                logger.warning(f"{linia}/{brygada}: Nienaturalne opóźnienie ({int(opoznienie/60)}min). Pojazd do reinicjalizacji")
+                pojazd['stan'] = 'INICJALIZACJA'
+                pojazd['historia_gps'] = []
+                pojazd['id_kursu'] = None
+                return 2
+
             # sprawdzamy czy nie jest już na pętli
             id_kursu = pojazd['id_kursu']
             czas_ostatniego_przystanku = self.rozklady[linia][brygada][id_kursu]['czas_konca']
             if przystanek_B['czas'] == czas_ostatniego_przystanku:
-                if utils.oblicz_odleglosc(lat_b, lon_b, lat, lon) < utils.DOKLADNOSC_GPS_M:
+                odleglosc_od_konca = utils.oblicz_odleglosc(lat_b, lon_b, lat, lon)
+                OCZEKIWANA_ODL_OD_KONCA = 150.0
+                if odleglosc_od_konca < OCZEKIWANA_ODL_OD_KONCA or proporcja_przebytej_drogi >= 0.9:
                     pojazd['stan'] = "NA_PETLI"
-                    logger.info(f"{linia}/{brygada}: Zjazd na pętlę, zakończono kurs {id_kursu}.")
+                    logger.info(f"{linia}/{brygada}: Zjazd na pętlę. Zakończono kurs {id_kursu}.")
             
             nazwa_kursu = self.rozklady[linia][brygada][id_kursu]['trasa']
             return (opoznienie, obecny_metr_trasy, nazwa_kursu)
@@ -184,7 +197,8 @@ class TrackerZTM:
         kandydaci = []
         for idx, kurs in enumerate(self.rozklady[linia][brygada]):
             if (czas_teraz >= kurs['czas_startu'] - okno_w_tyl 
-            and czas_teraz <= kurs['czas_konca'] + okno_w_przod):
+            and czas_teraz <= kurs['czas_konca'] + okno_w_przod
+            and not len(kurs['przystanki']) <= 2):
                 kandydaci.append((idx, kurs))
 
         if len(kandydaci) == 0:
@@ -207,11 +221,6 @@ class TrackerZTM:
         
         przy_petli = None
         for idx, kurs in kandydaci:
-            przystanki = kurs['przystanki']
-        
-            if len(przystanki) < 2:
-                continue
-
             kolejne_id_najblizszych = self._znajdz_trzy_kolejne_najblizsze_przystanki_na_trasie(linia, brygada, idx, lat_sz, lon_sz)
 
             if len(kolejne_id_najblizszych) == 1:
