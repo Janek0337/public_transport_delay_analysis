@@ -61,7 +61,7 @@ def main():
                     abs_opoznienie = abs(int(opoznienie))
                     minuty, sekundy = divmod(abs_opoznienie, 60)
 
-                    logging.info(f"Pojazd {linia}/{brygada} | Trasa: {nazwa_trasy} | Metr: {metr}m | Status: {znak}{minuty}m {sekundy}s")
+                    logging.info(f"Pojazd {linia}/{brygada} | Trasa: {nazwa_trasy} | Metr: {metr:.2f}m | Status: {znak}{minuty}m {sekundy}s")
                     linia_tekstu = f"{czas_str};{linia};{brygada};{nazwa_trasy};{metr:.2f};{znak};{minuty};{sekundy};{opoznienie:.0f}\n"
                     f.write(linia_tekstu)
 

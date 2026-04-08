@@ -1,0 +1,6 @@
+services:
+  tracker:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs

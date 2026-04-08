@@ -29,7 +29,7 @@ def stworz_trase_linii(api_key: str, linia: str):
         logger.error(f"Błąd API przy pobieraniu trasy linii {linia}: {e}")
         return 1
 
-    if not isinstance(data['result'], list):
+    if not isinstance(data['result'], dict):
         logger.warning(f"Brak odpowiedzi od API lub nieoczekiwana odpowiedź: \"{data['result']}\"")
         
     trasa_linii = data['result'][str(linia)]

@@ -181,8 +181,6 @@ class TrackerZTM:
                                 return 2
                         pojazd['ostatnie_metry'].pop(0)
 
-
-
             czas1, czas2 = przystanek_A['czas'], przystanek_B['czas']
             czas_oczekiwany_rozkladowy = czas1 + proporcja_przebytej_drogi*(czas2 - czas1)
             opoznienie = czas_gps - czas_oczekiwany_rozkladowy
@@ -296,7 +294,7 @@ class TrackerZTM:
         if przy_petli is not None:
             return przy_petli
         
-        logging.warning(f"Żadna trasa nie pasuje do tego, co robi ten autobus!\nLinia: {linia}, Brygada: {brygada}")
+        logging.warning(f"{linia}/{brygada}: żadna trasa nie pasuje do tego pojazdu")
         return -1
 
     def _znajdz_trzy_kolejne_najblizsze_przystanki_na_trasie(self, linia: str, brygada: str, id_kursu: int, lat_sz: float, lon_sz: float) -> list:

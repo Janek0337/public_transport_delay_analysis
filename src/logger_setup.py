@@ -1,5 +1,6 @@
 import logging
 from logging.handlers import RotatingFileHandler
+from src.utils import LOGS_DIR
 
 def setup_logger(console_logging = False):
     logger = logging.getLogger()
@@ -12,7 +13,7 @@ def setup_logger(console_logging = False):
 
     if not logger.handlers:
         file_handler = RotatingFileHandler(
-            "logs.log", maxBytes=(100 * 1024 * 1024), backupCount=3, encoding="utf-8"
+            LOGS_DIR/"logs.log", maxBytes=(100 * 1024 * 1024), backupCount=3, encoding="utf-8"
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

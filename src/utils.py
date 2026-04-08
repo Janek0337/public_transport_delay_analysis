@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / 'data'
+LOGS_DIR = ROOT_DIR / 'logs'
 DOKLADNOSC_GPS_M = 30.0
 OCZEKIWANA_ODL_OD_KONCA = 150.0
 
