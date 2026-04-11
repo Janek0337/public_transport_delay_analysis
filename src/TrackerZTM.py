@@ -109,7 +109,7 @@ class TrackerZTM:
 
         elif pojazd["stan"] == "W_TRASIE":
             przystanek_A, przystanek_B = pojazd['poprzedni_przystanek'], pojazd['nastpeny_przystanek']
-            if przystanek_A is None or przystanek_B is None:
+            if not przystanek_A or not przystanek_B:
                 return 2
             
             lat_a, lon_a = self.przystanki[przystanek_A['przystanek_id']]['lat'], self.przystanki[przystanek_A['przystanek_id']]['lon']
@@ -128,7 +128,7 @@ class TrackerZTM:
                         if czas_gps >= czas_startu_nast - 300:
                             
                             pA_nast, pB_nast = self._znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(linia, brygada, nast_kurs_id, lat, lon)
-                            if not bool(pA_nast):
+                            if bool(pA_nast):
                                 pojazd['id_kursu'] = nast_kurs_id
                                 pojazd['poprzedni_przystanek'] = pA_nast
                                 pojazd['nastpeny_przystanek'] = pB_nast
