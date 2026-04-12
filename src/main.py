@@ -7,6 +7,7 @@ from src.TrackerZTM import TrackerZTM
 import time
 from pathlib import Path
 from src.WeatherTracker import WeatherTracker
+import csv
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / 'data'
@@ -45,8 +46,20 @@ def main():
     punkty_pogodowe = [punkt_wiatraczna, punkt_politechnika, punkt_metro_bemowo, punkt_sggw, punkt_dworzec_zachodni, punkt_siekierki]
     pogoda = WeatherTracker(punkty_pogodowe)
 
-    with open(f'{DATA_DIR}/out.csv', 'w') as f:
-        f.write("czas_str;linia;brygada;nazwa_trasy;lat;lon;metr;znak minuty:sekundy;opoznienie;temp;czy_dzien;opad_deszczu;opad_sniegu;poryw_wiatru\n")
+    naglowki = [
+    'czas_str', 'linia', 'brygada', 'nazwa_trasy', 'lat', 'lon', 
+    'metr', 'opoznienie_str', 'opoznienie', 'temperatura', 
+    'czy_dzien', 'opad_deszczu', 'opad_sniegu', 'poryw_wiatru'
+    ]
+
+    nazwa_pliku_wyjsciowego = f'{DATA_DIR}/out.csv'
+    plik_istnieje = os.path.isfile(nazwa_pliku_wyjsciowego)
+
+    with open(nazwa_pliku_wyjsciowego , mode='a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=naglowki, delimiter=';')
+        if not plik_istnieje:
+            writer.writeheader()
+
         while True:
             logging.info("Pobieram dane o położeniu...")
             czas_start = time.time()
@@ -74,20 +87,29 @@ def main():
                     minuty, sekundy = divmod(abs_opoznienie, 60)
 
                     pogoda_tu = pogoda.pogoda_dla_punktu(lat, lon)
-                    temp = pogoda_tu.temperatura
-                    poryw_wiatru = pogoda_tu.poryw_wiatru
-                    opad_deszczu = pogoda_tu.opad_deszczu
-                    opad_sniegu = pogoda_tu.opad_sniegu
-                    czy_dzien = pogoda_tu.czy_dzien
-
+                    rekord = {
+                        'czas_str': czas_str,
+                        'linia': linia,
+                        'brygada': brygada,
+                        'nazwa_trasy': nazwa_trasy,
+                        'lat': lat,
+                        'lon': lon,
+                        'metr': f'{metr:.2f}',
+                        'opoznienie_str': f'{znak}{minuty:02d}:{sekundy:02d}',
+                        'opoznienie': f'{opoznienie:.0f}',
+                        'temperatura': pogoda_tu.temperatura,
+                        'czy_dzien': pogoda_tu.czy_dzien,
+                        'opad_deszczu': pogoda_tu.opad_deszczu,
+                        'opad_sniegu': pogoda_tu.opad_sniegu,
+                        'poryw_wiatru': pogoda_tu.poryw_wiatru
+                    }
                     logging.info(f"Pojazd {linia}/{brygada} | Trasa: {nazwa_trasy} | Metr: {metr:.2f}m | Status: {znak}{minuty}m {sekundy}s")
-                    linia_tekstu = f"{czas_str};{linia};{brygada};{nazwa_trasy};{lat};{lon};{metr:.2f};{znak}{minuty:02d}:{sekundy:02d};{opoznienie:.0f};{temp};{czy_dzien};{opad_deszczu};{opad_sniegu};{poryw_wiatru}\n"
-                    f.write(linia_tekstu)
+                    writer.writerow(rekord)
 
             time.sleep(max(0, 16 - (time.time() - czas_start)))
+    f.flush()
 
-
-    logger.info("Finished")
+    logger.info("Koniec")
 
 if __name__ == "__main__":
     main()
