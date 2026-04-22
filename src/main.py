@@ -30,7 +30,7 @@ def main():
         exit(1)
 
     #kolektor_danych.stworz_baze_polozen_przystankow(API_KEY)
-    linie = ['116', '138', '148', '156', '157', '185', '189', '500', '504', '509', '517', '523']
+    linie = ['114', '116', '138', '148', '157', '185', '189', '500', '504', '509', '517', '523']
     for linia in linie:
         kolektor_danych.stworz_trase_linii(API_KEY, linia)
         kolektor_danych.stworz_rozklad_linii(API_KEY, linia)

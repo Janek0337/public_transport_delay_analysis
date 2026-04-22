@@ -125,15 +125,22 @@ class TrackerZTM:
                         
                     if nast_kurs_id < len(self.rozklady[linia][brygada]):
                         czas_startu_nast = self.rozklady[linia][brygada][nast_kurs_id]['czas_startu']
-                        if czas_gps >= czas_startu_nast - 300:
+                        
+                        # Znajdź koordynaty ostatniego przystanku OBECNEGO kursu
+                        ostatni_przystanek = self.rozklady[linia][brygada][pojazd['id_kursu']]['przystanki'][-1]
+                        lat_konca = self.przystanki[ostatni_przystanek['przystanek_id']]['lat']
+                        lon_konca = self.przystanki[ostatni_przystanek['przystanek_id']]['lon']
+                        
+                        if utils.oblicz_odleglosc(lat, lon, lat_konca, lon_konca) < utils.OCZEKIWANA_ODL_OD_KONCA:
+                            if czas_gps >= czas_startu_nast - 300:
                             
-                            pA_nast, pB_nast = self._znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(linia, brygada, nast_kurs_id, lat, lon)
-                            if bool(pA_nast):
-                                pojazd['id_kursu'] = nast_kurs_id
-                                pojazd['poprzedni_przystanek'] = pA_nast
-                                pojazd['nastpeny_przystanek'] = pB_nast
-                                logger.info(f"{linia}/{brygada}: Przeskoczył na kurs {nast_kurs_id} omijając strefę pętli")
-                                return 2
+                                pA_nast, pB_nast = self._znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(linia, brygada, nast_kurs_id, lat, lon)
+                                if bool(pA_nast):
+                                    pojazd['id_kursu'] = nast_kurs_id
+                                    pojazd['poprzedni_przystanek'] = pA_nast
+                                    pojazd['nastpeny_przystanek'] = pB_nast
+                                    logger.info(f"{linia}/{brygada}: Przeskoczył na kurs {nast_kurs_id} omijając strefę pętli")
+                                    return 2
                     logger.warning(f"{linia}/{brygada} nie jest między oczekiwanymi przystankami")
                     return 2
             
@@ -360,4 +367,4 @@ class TrackerZTM:
 
         proporcja = (dA**2 + dC**2 - dB**2 ) / (2 * dC**2)
 
-        return proporcja
+        return max(0.0, min(1.0, proporcja))
