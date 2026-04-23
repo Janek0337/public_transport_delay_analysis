@@ -6,8 +6,12 @@ dist/
 wheels/
 *.egg-info
 .log
+.json
+.csv
 
 # Virtual environments
 .venv
 
 .env
+
+.ruff_cache

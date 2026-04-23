@@ -1,7 +1,8 @@
-from typing import TypedDict, Optional, Tuple, List
-from src import utils
 import json
 import logging
+from typing import List, Tuple, TypedDict
+
+from src import utils
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,8 @@ class TrackerZTM:
             przebyty_odcinek = proporcja_przebytej_drogi*(metr2 - metr1)
             obecny_metr_trasy = metr1 + przebyty_odcinek
 
-            # sprawdzenie trendu ruchu, czy zgodny z kierunkiem wybranej trasy i czy jesli sie nie rusza to czy nie jest przypadkiem zawieszony na pętli
+            # sprawdzenie trendu ruchu, czy zgodny z kierunkiem wybranej trasy
+            # i czy jesli sie nie rusza to czy nie jest przypadkiem zawieszony na pętli
             pojazd['ostatnie_metry'].append(obecny_metr_trasy)
             id_kursu = pojazd['id_kursu']
             if len(pojazd['ostatnie_metry']) > 1:
@@ -246,7 +248,7 @@ class TrackerZTM:
         if len(kandydaci) == 0:
             return -1 # brak rozkladu
         
-        for idx, kurs in kandydaci:
+        for _idx, kurs in kandydaci:
             if len(kurs['przystanki']) > 0:
                 id_start = kurs['przystanki'][0]['przystanek_id']
                 id_koniec = kurs['przystanki'][-1]['przystanek_id']
@@ -255,14 +257,15 @@ class TrackerZTM:
                 lat_k, lon_k = self.przystanki[id_koniec]['lat'], self.przystanki[id_koniec]['lon']
                 
                 # jeśli jest w promieniu 200m od startu lub końca potencjalnej trasy to nie rozważamy go
-                if utils.oblicz_odleglosc(lat_sz, lon_sz, lat_s, lon_s) < utils.OCZEKIWANA_ODL_OD_KONCA or utils.oblicz_odleglosc(lat_sz, lon_sz, lat_k, lon_k) < utils.OCZEKIWANA_ODL_OD_KONCA:
+                if (utils.oblicz_odleglosc(lat_sz, lon_sz, lat_s, lon_s) < utils.OCZEKIWANA_ODL_OD_KONCA or
+                    utils.oblicz_odleglosc(lat_sz, lon_sz, lat_k, lon_k) < utils.OCZEKIWANA_ODL_OD_KONCA):
                     return -2
 
         if len(kandydaci) == 1:
             return kandydaci[0][0]
         
         przy_petli = None
-        for idx, kurs in kandydaci:
+        for idx, _kurs in kandydaci:
             kolejne_id_najblizszych = self._znajdz_trzy_kolejne_najblizsze_przystanki_na_trasie(linia, brygada, idx, lat_sz, lon_sz)
 
             if len(kolejne_id_najblizszych) == 1:
@@ -330,7 +333,8 @@ class TrackerZTM:
 
         return id_przystankow
 
-    def _znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(self, linia: str, brygada: str, id_kursu: int, lat_sz: float, lon_sz: float) -> tuple[dict, dict]:
+    def _znajdz_miedzy_ktorymi_przystankami_trasy_pojazd(self, linia: str, brygada: str,
+                                                         id_kursu: int, lat_sz: float, lon_sz: float) -> tuple[dict, dict]:
         lista_przystankow_kursu = self.rozklady[linia][brygada][id_kursu]['przystanki']
 
         for i in range(len(lista_przystankow_kursu)):

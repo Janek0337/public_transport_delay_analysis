@@ -1,12 +1,13 @@
+import json
+import logging
 import math
-from pathlib import Path
 import os
 import re
-import json
+from pathlib import Path
+
+import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-import numpy as np
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ def wyznacz_punkty_pomiarowe_pogody(linie: list[str]) -> list[tuple[float, float
 
     zakres_k_centroidow = range(5, 25)
     wyniki_sylwetek = {k: [] for k in zakres_k_centroidow}
-    iteracji_usredniajacych = 20
+    iteracji_usredniajacych = 30
 
     X = np.array(wspolrzedne)
 

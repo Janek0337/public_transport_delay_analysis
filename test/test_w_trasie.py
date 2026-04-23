@@ -1,7 +1,10 @@
+import json
+
 import pytest
 from pytest import approx
+
 from src.TrackerZTM import TrackerZTM
-import json
+
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_dane():

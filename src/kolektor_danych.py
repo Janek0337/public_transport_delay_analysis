@@ -1,8 +1,10 @@
-import requests
 import json
-from src.utils import czas_na_sekundy
-from pathlib import Path
 import logging
+from pathlib import Path
+
+import requests
+
+from src.utils import czas_na_sekundy
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +147,7 @@ def stworz_rozklad_linii(api_key: str, linia: str):
                     'nr_kolejnosci': trasa_linii['warianty_tras'][stop['trasa']][przystanek_id]['nr_kolejnosci']
                     }
                     )
-            except KeyError as e:
+            except KeyError:
                 logging.warning(f"Nie znaleziono przystnaku o id {przystanek_id} w trasie linii {linia}. Pomijam go.")
                 continue
 

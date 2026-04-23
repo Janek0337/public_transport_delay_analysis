@@ -1,6 +1,8 @@
 import logging
 from logging.handlers import RotatingFileHandler
+
 from src.utils import LOGS_DIR
+
 
 def setup_logger(console_logging = False):
     logger = logging.getLogger()

@@ -17,9 +17,32 @@ dependencies = [
     "requests>=2.32.5",
     "requests-cache>=1.3.1",
     "retry-requests>=2.0.0",
+    "ruff>=0.15.11",
     "scikit-learn>=1.8.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 150
+
+extend-exclude = [
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = []
+
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

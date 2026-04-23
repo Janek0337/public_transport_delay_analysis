@@ -1,6 +1,10 @@
-import pytest
-from src.TrackerZTM import TrackerZTM
 import json
+
+import pytest
+
+from src import utils
+from src.TrackerZTM import TrackerZTM
+
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_dane():
@@ -17,6 +21,12 @@ def setup_dane():
         tracker.przystanki = jsonik
 
     yield {'tracker': tracker, 'linie': linie}
+
+@pytest.fixture(scope="function", autouse=True)
+def zamroz_stale(monkeypatch):
+    monkeypatch.setattr(utils, 'OCZEKIWANA_ODL_OD_KONCA', 100)
+    monkeypatch.setattr(utils, 'MAX_ODLEGLOSC_OD_PROSTEJ_TRASY_M', 50)
+    monkeypatch.setattr(utils, 'DOKLADNOSC_GPS_M', 30)
 
 
 def test_normalna_jazda(setup_dane: dict):
@@ -61,8 +71,8 @@ def test_ogromne_opoznienie(setup_dane: dict):
     TEST_BRYGADA = "1"
     TEST_ID_KURSU = 0
     CZAS_OBECNY = 32450
-    mock_przystanek1 = tracker.rozklady[linia][TEST_BRYGADA][TEST_ID_KURSU]['przystanki'][3]
-    mock_przystanek2 = tracker.rozklady[linia][TEST_BRYGADA][TEST_ID_KURSU]['przystanki'][4]
+    mock_przystanek1 = tracker.rozklady[linia][TEST_BRYGADA][TEST_ID_KURSU]['przystanki'][1]
+    mock_przystanek2 = tracker.rozklady[linia][TEST_BRYGADA][TEST_ID_KURSU]['przystanki'][2]
 
     mock_przystanek1_id = mock_przystanek1['przystanek_id']
     mock_przystanek1_lat = tracker.przystanki[mock_przystanek1_id]['lat']
@@ -86,7 +96,7 @@ def test_ogromne_opoznienie(setup_dane: dict):
     assert(stan['stan'] == 'W_TRASIE')
     assert(stan['id_kursu'] == TEST_ID_KURSU)
 
-def test_zjazd_na_petle(setup_dane: dict):
+def test_inicjalizacja_przy_petli(setup_dane: dict):
     tracker = setup_dane['tracker']
     linia = setup_dane['linie'][0]
     TEST_BRYGADA = "1"
@@ -99,10 +109,11 @@ def test_zjazd_na_petle(setup_dane: dict):
     lat_o, lon_o = tracker.przystanki[ostatni['przystanek_id']]['lat'], tracker.przystanki[ostatni['przystanek_id']]['lon']
 
     tracker.przetworz_pozycje(linia, TEST_BRYGADA, lat_p + 0.0001, lon_p, CZAS_OBECNY)
-    wynik = tracker.przetworz_pozycje(linia, TEST_BRYGADA, lat_p + (lat_o - lat_p)*0.8, lon_p + (lon_o - lon_p)*0.8, CZAS_OBECNY + 30)
+    wynik = tracker.przetworz_pozycje(linia, TEST_BRYGADA, lat_p + (lat_o - lat_p)*0.95, lon_p + (lon_o - lon_p)*0.95, CZAS_OBECNY + 30)
     
-    assert wynik == 0
-    assert tracker.pojazdy[linia][TEST_BRYGADA]['id_kursu'] == 0
+    assert wynik == 2
+    assert tracker.pojazdy[linia][TEST_BRYGADA]['id_kursu'] == -1
+    assert tracker.pojazdy[linia][TEST_BRYGADA]['stan'] == 'INICJALIZACJA'
 
 def test_autobus_jedzie_szybko(setup_dane: dict):
     tracker = setup_dane['tracker']

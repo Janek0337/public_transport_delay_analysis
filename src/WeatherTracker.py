@@ -1,9 +1,11 @@
+import logging
+import time
+
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
+
 from src.utils import oblicz_odleglosc
-import time
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class WeatherTracker:
         self.update_co_sekund = 30 * 60
         
     def make_call(self) -> dict[tuple, StanPogody]:
-        logger.info(f"Pobieram informacje o pogodzie...")
+        logger.info("Pobieram informacje o pogodzie...")
         cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
         retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
         openmeteo = openmeteo_requests.Client(session = retry_session)
@@ -66,5 +68,5 @@ class WeatherTracker:
             self.ostatni_update = obecny_czas
 
         najblizszy_punkt = min(self.warunki,
-                                key=lambda punkt: oblicz_odleglosc(lat, lon, punkt[0]/self.dokladnosc, punkt[1]/self.dokladnosc))
+            key=lambda punkt: oblicz_odleglosc(lat, lon, punkt[0]/self.dokladnosc, punkt[1]/self.dokladnosc))
         return self.warunki[najblizszy_punkt]

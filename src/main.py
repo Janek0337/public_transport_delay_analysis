@@ -1,16 +1,18 @@
-import logging
-from src.logger_setup import setup_logger
-from src.WeatherTracker import WeatherTracker
-from dotenv import load_dotenv, find_dotenv
-import os
-import src.kolektor_danych as kolektor_danych
-from src.TrackerZTM import TrackerZTM
-import time
-from pathlib import Path
 import csv
-import src.utils as utils
+import logging
+import os
+import time
 from datetime import datetime
+
+from dotenv import find_dotenv, load_dotenv
+
+import src.kolektor_danych as kolektor_danych
+import src.utils as utils
+from src.logger_setup import setup_logger
+from src.TrackerZTM import TrackerZTM
 from src.utils import OUTPUT_DIR
+from src.WeatherTracker import WeatherTracker
+
 
 def main():
 
@@ -118,7 +120,7 @@ def main():
 
         except KeyboardInterrupt:
             f.flush()
-            for kurs, rekordy in BUFOR_STANOW.items():
+            for _, rekordy in BUFOR_STANOW.items():
                 if rekordy:
                     writer.writerows(rekordy)
             logger.info("Koniec")
