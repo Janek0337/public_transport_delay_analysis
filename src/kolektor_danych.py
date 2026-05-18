@@ -1,10 +1,10 @@
 import json
 import logging
 from pathlib import Path
-
 import requests
-
+from requests.adapters import HTTPAdapter
 from src.utils import czas_na_sekundy
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +12,18 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / 'data'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BASE_URL = "https://api.um.warszawa.pl/api/action/"
+
+retry_strategy = Retry(
+    total=7,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=['GET']
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+
+session = requests.Session()
+session.mount("https://", adapter)
 
 def stworz_trase_linii(api_key: str, linia: str):
     endpoint = "public_transport_routes"
@@ -23,7 +35,7 @@ def stworz_trase_linii(api_key: str, linia: str):
 
     try:
         logging.info(f'Pobieram trasę linii {linia}')
-        res = requests.get(url=URL, params=params, timeout=10)
+        res = session.get(url=URL, params=params, timeout=10)
         res.raise_for_status()
         data = res.json()
         
@@ -101,7 +113,7 @@ def stworz_rozklad_linii(api_key: str, linia: str):
             'line': linia
         }
         try:
-            res = requests.get(url=URL, params=params, timeout=10)
+            res = session.get(url=URL, params=params, timeout=10)
             res.raise_for_status()
             data = res.json()
 
@@ -211,7 +223,7 @@ def stworz_baze_polozen_przystankow(api_key: str):
     }
 
     try:
-        res = requests.get(url=PRZYSTANKI_URL, params=params, timeout=10)
+        res = session.get(url=PRZYSTANKI_URL, params=params, timeout=10)
         res.raise_for_status()
         data = res.json()
     except Exception as e:
@@ -255,7 +267,7 @@ def zbierz_obecne_polozenie(api_key: str, linie: list[str]) -> list[dict]:
     }
 
     try:
-        res = requests.post(url=BUS_LOC_URL, params=params, timeout=10)
+        res = session.post(url=BUS_LOC_URL, params=params, timeout=10)
         res.raise_for_status()
         data = res.json()
 
