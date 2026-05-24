@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / 'data'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-BASE_URL = "https://api.um.warszawa.pl/api/action/"
+BASE_URL = "https://dane.um.warszawa.pl/api/action/"
 
 retry_strategy = Retry(
     total=7,
@@ -26,8 +26,9 @@ session = requests.Session()
 session.mount("https://", adapter)
 
 def stworz_trase_linii(api_key: str, linia: str):
+
     endpoint = "public_transport_routes"
-    URL = BASE_URL + endpoint
+    URL = f"https://api.um.warszawa.pl/api/action/{endpoint}"
 
     params = {
         'apikey': api_key,
@@ -89,9 +90,13 @@ def stworz_trase_linii(api_key: str, linia: str):
 
 
 def stworz_rozklad_linii(api_key: str, linia: str):
-    endpoint = "dbtimetable_get"
+    endpoint = "get_ztm_odjazdy_linii_z_przystanku"
     URL = BASE_URL + endpoint
-    ID_ENDPOINT_ROZKLADOW = 'e923fa0e-d96c-43f9-ae6e-60518c9f3238'
+
+    header = {
+        'Authorization': api_key,
+        'Content-Type': 'application/json',
+    }
 
     trasa_linii = stworz_trase_linii(api_key, linia)
 
@@ -105,15 +110,14 @@ def stworz_rozklad_linii(api_key: str, linia: str):
     for przystanek_id in unikalne_przystanki_id:
 
         przystanek_info = przystanek_id.split('_')
-        params = {
-            'id': ID_ENDPOINT_ROZKLADOW,
-            'apikey': api_key,
+        payload = {
             'busstopId': przystanek_info[0],
             'busstopNr': przystanek_info[1],
             'line': linia
         }
+
         try:
-            res = session.get(url=URL, params=params, timeout=10)
+            res = session.get(url=URL, headers=header, json=payload, timeout=10)
             res.raise_for_status()
             data = res.json()
 
@@ -176,6 +180,88 @@ def stworz_rozklad_linii(api_key: str, linia: str):
 
     return 0
 
+
+def stworz_baze_polozen_przystankow(api_key: str):
+    endpoint = "get_ztm_przystanki_komunikacji_miejskiej"
+    PRZYSTANKI_URL = BASE_URL + endpoint
+    
+    headers = {
+        'Authorization': api_key
+    }
+
+    try:
+        res = session.post(url=PRZYSTANKI_URL, headers=headers, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+    except Exception as e:
+        logger.error(f"Błąd API przy pobieraniu listy położeń przystanków: {e}")
+        return 1
+
+    przystanki = dict()
+    for przystanek in data['result']:
+        dobry_przystanek = dict()
+        for kvp in przystanek['values']:
+            if kvp['key'] == 'zespol':
+                zespol = kvp['value']
+            elif kvp['key'] == 'slupek':
+                slupek = kvp['value']
+            elif kvp['key'] == 'szer_geo':
+                dobry_przystanek['lat'] = float(kvp['value'])
+            elif kvp['key'] == 'dlug_geo':
+                dobry_przystanek['lon'] = float(kvp['value'])
+            elif kvp['key'] == 'nazwa_zespolu':
+                dobry_przystanek['nazwa_przystanku'] = kvp['value']
+            
+        przystanek_id = f"{zespol}_{slupek}"
+        przystanki[przystanek_id] = dobry_przystanek
+
+    sciezka = DATA_DIR / 'przystanki.json'
+    with open(sciezka, 'w', encoding='utf-8') as f:
+        json.dump(przystanki, f, ensure_ascii=False, indent=4)
+    
+    return 0
+
+
+def zbierz_obecne_polozenie(api_key: str, linie: list[str]) -> list[dict]:
+    endpoint = 'get_ztm_lokalizacja_pojazdow'
+    BUS_LOC_URL = BASE_URL + endpoint
+
+    headers = {
+        'Authorization': api_key
+    }
+
+    payload = {
+        "type": 1 # 1 dla autobusu, 2 tramwaj
+    }
+
+    try:
+        res = session.get(url=BUS_LOC_URL, headers=headers, json=payload, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+
+    except Exception as e:
+        logger.error(f"Błąd API przy pobieraniu aktualnego położenia pojazdów: {e}")
+        return []
+
+    if not isinstance(data['result'], list):
+        logger.warning(f"Brak autobusów na trasie lub nieoczekiwana odpowiedź od API: \"{data['result']}\"")
+        return []
+    
+    wynik = [{'linia': x['Lines'],
+            'lat': x['Lat'],
+            'lon': x['Lon'],
+            'brygada': x['Brigade'],
+            'czas_str': x['Time'],
+            'czas': czas_na_sekundy(x['Time'])
+            } for x in data['result'] if x['Lines'] in linie]
+
+    sciezka = DATA_DIR / 'polozenie.json'
+    with open(sciezka, 'w') as f:
+        json.dump(wynik, f, indent=4)
+
+    return wynik
+
+
 def _pogrupuj_kursy(lista_brygad: dict[str, list]):
     pogrupowane_kursy = dict()
     for brygada in lista_brygad.keys():
@@ -207,88 +293,8 @@ def _pogrupuj_kursy(lista_brygad: dict[str, list]):
 
     return pogrupowane_kursy
 
+
 def _usun_ze_slownika(slownik: dict, klucz) -> dict:
     nowy_slownik = slownik.copy()
     nowy_slownik.pop(klucz, None)
     return nowy_slownik 
-
-
-def stworz_baze_polozen_przystankow(api_key: str):
-    endpoint = "dbtimetable_get"
-    PRZYSTANKI_URL = BASE_URL + endpoint
-    ID_ENDPOINTU_PRZYSTANKOW = 'ab75c33d-3a26-4342-b36a-6e5fef0a3ac3'
-    params = {
-        'id': ID_ENDPOINTU_PRZYSTANKOW,
-        'apikey': api_key,
-    }
-
-    try:
-        res = session.get(url=PRZYSTANKI_URL, params=params, timeout=10)
-        res.raise_for_status()
-        data = res.json()
-    except Exception as e:
-        logger.error(f"Błąd API przy pobieraniu listy położeń przystanków: {e}")
-        return 1
-
-    przystanki = dict()
-    for przystanek in data['result']:
-        dobry_przystanek = dict()
-        for kvp in przystanek['values']:
-            if kvp['key'] == 'zespol':
-                zespol = kvp['value']
-            elif kvp['key'] == 'slupek':
-                slupek = kvp['value']
-            elif kvp['key'] == 'szer_geo':
-                dobry_przystanek['lat'] = float(kvp['value'])
-            elif kvp['key'] == 'dlug_geo':
-                dobry_przystanek['lon'] = float(kvp['value'])
-            elif kvp['key'] == 'nazwa_zespolu':
-                dobry_przystanek['nazwa_przystanku'] = kvp['value']
-            
-        przystanek_id = f"{zespol}_{slupek}"
-        przystanki[przystanek_id] = dobry_przystanek
-
-    sciezka = DATA_DIR / 'przystanki.json'
-    with open(sciezka, 'w', encoding='utf-8') as f:
-        json.dump(przystanki, f, ensure_ascii=False, indent=4)
-    
-    return 0
-
-def zbierz_obecne_polozenie(api_key: str, linie: list[str]) -> list[dict]:
-    endpoint = 'busestrams_get'
-    BUS_LOC_RESOURCE_ID = 'f2e5503e-927d-4ad3-9500-4ab9e55deb59'
-    BUS_LOC_URL = BASE_URL + endpoint
-    type = 1 # 1 dla autobusu, 2 tramwaj
-
-    params = {
-        'resource_id': BUS_LOC_RESOURCE_ID,
-        'apikey': api_key,
-        'type': type
-    }
-
-    try:
-        res = session.post(url=BUS_LOC_URL, params=params, timeout=10)
-        res.raise_for_status()
-        data = res.json()
-
-    except Exception as e:
-        logger.error(f"Błąd API przy pobieraniu aktualnego położenia pojazdów: {e}")
-        return []
-
-    if not isinstance(data['result'], list):
-        logger.warning(f"Brak autobusów na trasie lub nieoczekiwana odpowiedź od API: \"{data['result']}\"")
-        return []
-    
-    wynik = [{'linia': x['Lines'],
-            'lat': x['Lat'],
-            'lon': x['Lon'],
-            'brygada': x['Brigade'],
-            'czas_str': x['Time'],
-            'czas': czas_na_sekundy(x['Time'])
-            } for x in data['result'] if x['Lines'] in linie]
-
-    sciezka = DATA_DIR / 'polozenie.json'
-    with open(sciezka, 'w') as f:
-        json.dump(wynik, f, indent=4)
-
-    return wynik

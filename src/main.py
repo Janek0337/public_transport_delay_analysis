@@ -29,10 +29,18 @@ def main():
         logging.error("Klucz api w pliku .env jets pusty")
         exit(1)
 
+    OLD_API_KEY = os.getenv('OLD_API_KEY')
+    if OLD_API_KEY is None:
+        logging.error("Nie znaleziono starego klucza api w pliku .env")
+        exit(1)
+    if OLD_API_KEY == "":
+        logging.error("Stary klucz api w pliku .env jets pusty")
+        exit(1)
+
     kolektor_danych.stworz_baze_polozen_przystankow(API_KEY)
     linie = ['114', '116', '135', '138', '148', '157', '158', '185', '187', '189', '500', '504', '509', '517', '523']
     for linia in linie:
-        kolektor_danych.stworz_trase_linii(API_KEY, linia)
+        kolektor_danych.stworz_trase_linii(OLD_API_KEY, linia)
         kolektor_danych.stworz_rozklad_linii(API_KEY, linia)
 
     tracker = TrackerZTM(linie)
